@@ -1,0 +1,181 @@
+/* ===== Variables: definimos los colores una vez y los reutilizamos ===== */
+:root {
+  --fondo: #12181f;
+  --panel: #1c2530;
+  --texto: #e8edf2;
+  --acento: #2f81f7;
+  --local: #2f81f7;
+  --visitante: #e5534b;
+}
+
+/* El asterisco selecciona TODOS los elementos: quitamos márgenes por defecto */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, sans-serif;
+  min-height: 100vh; /* al menos el alto de la pantalla */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+}
+
+/* Clase que oculta cualquier elemento; el JS la pone y la quita */
+.oculto {
+  display: none !important;
+}
+
+/* ===== Pantalla de inicio ===== */
+#pantalla-inicio {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+}
+
+#pantalla-inicio h1 {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+#pantalla-inicio input {
+  background: var(--panel);
+  border: 1px solid #33404f;
+  border-radius: 8px;
+  color: var(--texto);
+  font-size: 1.1rem;
+  padding: 12px;
+}
+
+.botones-modalidad {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-modalidad {
+  flex: 1; /* los tres botones se reparten el ancho por igual */
+  background: var(--acento);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 1.1rem;
+  padding: 14px 0;
+  cursor: pointer;
+}
+
+/* ===== Marcador ===== */
+#pantalla-marcador {
+  width: 100%;
+  max-width: 700px;
+  text-align: center;
+}
+
+#paneles {
+  display: flex;
+  gap: 12px;
+}
+
+/* Cuando toca cambio de campo, el JS añade esta clase y los paneles se invierten */
+#paneles.invertido {
+  flex-direction: row-reverse;
+}
+
+.panel {
+  flex: 1;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Borde de color para distinguir a cada equipo */
+#panel-local     { border-top: 4px solid var(--local); }
+#panel-visitante { border-top: 4px solid var(--visitante); }
+
+.nombre-equipo {
+  font-size: 1.2rem;
+  /* si el nombre es muy largo, se corta con puntos suspensivos */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.puntos {
+  font-size: 5rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.sets-ganados {
+  opacity: 0.7;
+}
+
+.btn-sumar, .btn-restar {
+  width: 80%;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.3rem;
+  padding: 12px 0;
+  cursor: pointer;
+}
+
+.btn-sumar {
+  background: var(--acento);
+  color: white;
+}
+
+.btn-restar {
+  background: #33404f;
+  color: var(--texto);
+  font-size: 1rem;
+  padding: 8px 0;
+}
+
+#info-set {
+  margin-top: 14px;
+  opacity: 0.7;
+}
+
+/* ===== Avisos (cambio de campo, set ganado) ===== */
+#aviso {
+  background: #b8860b;
+  color: white;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+  font-weight: bold;
+}
+
+/* ===== Fin de partido ===== */
+#fin-partido {
+  margin-top: 20px;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+#resumen-sets {
+  margin: 12px 0;
+  opacity: 0.8;
+}
+
+#btn-nuevo-partido {
+  background: var(--acento);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 1.1rem;
+  padding: 12px 24px;
+  cursor: pointer;
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!-- Esto hace que la web se adapte al ancho del móvil en vez de verse en miniatura -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marcador Voley</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== PANTALLA 1: configuración del partido ===== -->
+  <section id="pantalla-inicio">
+    <h1>🏐 Marcador Voley</h1>
+
+    <label for="nombre-local">Equipo local</label>
+    <input id="nombre-local" type="text" placeholder="Local" maxlength="20">
+
+    <label for="nombre-visitante">Equipo visitante</label>
+    <input id="nombre-visitante" type="text" placeholder="Visitante" maxlength="20">
+
+    <label>Modalidad</label>
+    <div class="botones-modalidad">
+      <button class="btn-modalidad" data-modalidad="4v4">4 vs 4</button>
+      <button class="btn-modalidad" data-modalidad="6v6">6 vs 6</button>
+      <button class="btn-modalidad" data-modalidad="playa">Playa</button>
+    </div>
+  </section>
+
+  <!-- ===== PANTALLA 2: el marcador ===== -->
+  <section id="pantalla-marcador" class="oculto">
+
+    <div id="aviso" class="oculto"></div>
+
+    <div id="paneles">
+      <div class="panel" id="panel-local">
+        <h2 class="nombre-equipo"></h2>
+        <div class="sets-ganados">Sets: <span>0</span></div>
+        <div class="puntos">0</div>
+        <button class="btn-sumar">+1</button>
+        <button class="btn-restar">−1</button>
+      </div>
+
+      <div class="panel" id="panel-visitante">
+        <h2 class="nombre-equipo"></h2>
+        <div class="sets-ganados">Sets: <span>0</span></div>
+        <div class="puntos">0</div>
+        <button class="btn-sumar">+1</button>
+        <button class="btn-restar">−1</button>
+      </div>
+    </div>
+
+    <div id="info-set"></div>
+
+    <div id="fin-partido" class="oculto">
+      <h2 id="texto-ganador"></h2>
+      <div id="resumen-sets"></div>
+      <button id="btn-nuevo-partido">Nuevo partido</button>
+    </div>
+
+  </section>
+
+  <!-- El script va al final: así el HTML de arriba ya existe cuando el JS lo busca -->
+  <script src="app.js"></script>
+</body>
+</html>

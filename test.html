@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Tests — Marcador Voley</title>
+  <style>
+    body { font-family: monospace; background: #12181f; color: #e8edf2; padding: 20px; }
+    .ok { color: #4caf50; }
+    .fallo { color: #e5534b; font-weight: bold; }
+    /* Los paneles del marcador están solo para que app.js cargue; los escondemos */
+    #escenario { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Tests de la lógica del marcador</h1>
+  <pre id="salida"></pre>
+
+  <!-- app.js necesita encontrar estos elementos para cargar sin error.
+       Es una copia mínima del marcador real, oculta con CSS. -->
+  <div id="escenario">
+    <section id="pantalla-inicio">
+      <input id="nombre-local"><input id="nombre-visitante">
+      <button class="btn-modalidad" data-modalidad="4v4"></button>
+    </section>
+    <section id="pantalla-marcador">
+      <div id="aviso"></div>
+      <div id="paneles">
+        <div class="panel" id="panel-local">
+          <h2 class="nombre-equipo"></h2>
+          <div class="sets-ganados">Sets: <span></span></div>
+          <div class="puntos"></div>
+          <button class="btn-sumar"></button><button class="btn-restar"></button>
+        </div>
+        <div class="panel" id="panel-visitante">
+          <h2 class="nombre-equipo"></h2>
+          <div class="sets-ganados">Sets: <span></span></div>
+          <div class="puntos"></div>
+          <button class="btn-sumar"></button><button class="btn-restar"></button>
+        </div>
+      </div>
+      <div id="info-set"></div>
+      <div id="fin-partido">
+        <h2 id="texto-ganador"></h2>
+        <div id="resumen-sets"></div>
+        <button id="btn-nuevo-partido"></button>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const salida = document.querySelector('#salida');
+    let fallos = 0;
+
+    function assert(cond, msg) {
+      const linea = document.createElement('div');
+      linea.textContent = (cond ? 'OK    ' : 'FALLO ') + msg;
+      linea.className = cond ? 'ok' : 'fallo';
+      salida.appendChild(linea);
+      if (!cond) fallos++;
+    }
+
+    // ---------- PLAYA: cambio de campo cada 7 ----------
+    partido = nuevoPartido('playa', 'A', 'B');
+    for (let i = 0; i < 4; i++) sumarPunto(0);
+    for (let i = 0; i < 3; i++) sumarPunto(1);   // 4-3, suma 7
+    assert(partido.ladosInvertidos === true, 'playa: cambio de campo a los 7 puntos');
+
+    restarPunto(1);                               // suma 6
+    assert(partido.ladosInvertidos === false, 'playa: restar el punto 7 deshace el cambio');
+
+    sumarPunto(1);                                // suma 7 otra vez
+    assert(partido.ladosInvertidos === true, 'playa: re-sumar vuelve a cambiar (sin duplicar)');
+
+    // ---------- PLAYA: cierre de set y regla del +2 ----------
+    for (let i = 0; i < 17; i++) sumarPunto(0);   // A llega a 21; B se quedó en 3
+    assert(partido.sets[0] === 1 && partido.puntos[0] === 0, 'playa: set cerrado, puntos a 0');
+    assert(partido.setsCerrados[0] === '21-3', 'playa: resultado guardado 21-3');
+
+    partido.puntos = [20, 20];
+    sumarPunto(0);                                // 21-20
+    assert(partido.sets[0] === 1, 'playa: 21-20 NO cierra el set (falta +2)');
+    sumarPunto(0);                                // 22-20
+    assert(partido.terminado === true, 'playa: 22-20 cierra set y partido (2-0)');
+
+    // ---------- PLAYA: set decisivo a 15, cambio cada 5 ----------
+    partido = nuevoPartido('playa', 'A', 'B');
+    partido.sets = [1, 1];
+    assert(puntosObjetivo(partido) === 15, 'playa: decisivo a 15');
+    for (let i = 0; i < 5; i++) sumarPunto(0);
+    assert(partido.ladosInvertidos === true, 'playa decisivo: cambio a los 5');
+
+    // ---------- 6v6: decisivo con cambio único a los 8 ----------
+    partido = nuevoPartido('6v6', 'A', 'B');
+    partido.sets = [2, 2];
+    assert(puntosObjetivo(partido) === 15, '6v6: 5º set a 15');
+    for (let i = 0; i < 4; i++) { sumarPunto(0); sumarPunto(1); }  // 4-4, suma 8
+    assert(partido.ladosInvertidos === true, '6v6 decisivo: cambio único a los 8');
+    sumarPunto(0); sumarPunto(1);                 // suma 10
+    assert(partido.ladosInvertidos === true, '6v6 decisivo: NO hay segundo cambio');
+
+    restarPunto(0); restarPunto(1);               // suma 8: el cambio sigue siendo válido
+    assert(partido.ladosInvertidos === true, '6v6 decisivo: en suma 8 el cambio se mantiene');
+    restarPunto(0);                               // suma 7: se quita el punto que causó el cambio
+    assert(partido.ladosInvertidos === false, '6v6 decisivo: bajar de 8 deshace el cambio');
+    assert(partido.yaHuboCambioDecisivo === false, '6v6 decisivo: se puede volver a cambiar luego');
+
+    // ---------- 6v6: set normal sin cambios, partido a 3 sets ----------
+    partido = nuevoPartido('6v6', 'A', 'B');
+    for (let i = 0; i < 10; i++) sumarPunto(0);
+    assert(partido.ladosInvertidos === false, '6v6 set normal: nunca cambia de campo');
+
+    partido = nuevoPartido('6v6', 'A', 'B');
+    for (let s = 0; s < 3; s++) for (let i = 0; i < 25; i++) sumarPunto(0);
+    assert(partido.terminado && partido.sets[0] === 3, '6v6: 3 sets a 25 ganan el partido');
+
+    // ---------- 4v4: mejor de 3, decisivo a 15 ----------
+    partido = nuevoPartido('4v4', 'A', 'B');
+    partido.sets = [1, 1];
+    assert(puntosObjetivo(partido) === 15, '4v4: 3er set a 15');
+
+    // ---------- Casos límite ----------
+    partido = nuevoPartido('4v4', 'A', 'B');
+    restarPunto(0);
+    assert(partido.puntos[0] === 0, 'restar con 0 puntos no hace nada');
+
+    partido = nuevoPartido('4v4', 'A', 'B');
+    partido.terminado = true;
+    sumarPunto(0);
+    assert(partido.puntos[0] === 0, 'partido terminado: sumar no hace nada');
+
+    const resumen = document.createElement('h2');
+    resumen.id = 'resultado-final';
+    resumen.textContent = fallos === 0 ? 'TODO OK' : fallos + ' FALLOS';
+    resumen.className = fallos === 0 ? 'ok' : 'fallo';
+    salida.appendChild(resumen);
+  </script>
+</body>
+</html>
