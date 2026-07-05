@@ -744,6 +744,22 @@ document.querySelector('#btn-login-volver').addEventListener('click', function (
   mostrarPantalla('pantalla-inicio');
 });
 
+document.querySelector('#btn-cambiar-clave').addEventListener('click', async function () {
+  // prompt() es el hermano de confirm(): pide un texto. Aviso: se ve
+  // lo que escribes — suficiente por ahora, mejorable con una pantalla.
+  const actual = prompt('Contraseña actual:');
+  if (actual === null) return;
+  const nueva = prompt('Contraseña nueva (mínimo 6 caracteres):');
+  if (nueva === null) return;
+  try {
+    await api('POST', '/api/cambiar_clave', { actual: actual, nueva: nueva });
+  } catch (e) {
+    mostrarAviso(e.message);
+    return;
+  }
+  mostrarAviso('Contraseña cambiada');
+});
+
 document.querySelector('#btn-salir-sesion').addEventListener('click', async function () {
   try { await api('POST', '/api/logout'); } catch (e) { /* da igual: cerramos localmente */ }
   usuario = null;

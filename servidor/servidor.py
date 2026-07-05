@@ -306,7 +306,12 @@ def borrar_usuario(admin, usuario_id):
 
 # ---------- Arranque ----------
 
+# La BD se prepara al IMPORTAR el módulo, no solo al ejecutarlo:
+# en tu ordenador esto corre con "python servidor.py", pero en el
+# host (PythonAnywhere) el módulo se importa y este if de abajo
+# nunca se ejecuta.
+iniciar_bd()
+
 if __name__ == "__main__":
-    iniciar_bd()
     # host 0.0.0.0 = acepta conexiones de otros aparatos de tu red (el móvil)
     app.run(host="0.0.0.0", port=5000, debug=False)
