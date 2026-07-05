@@ -1,0 +1,14 @@
+# Cosas del servidor que NO se suben a GitHub.
+# OJO: en .gitignore los comentarios van en su propia línea;
+# si van al final de un patrón, git los toma como parte del nombre.
+
+# el entorno virtual se recrea en cada máquina
+servidor/.venv/
+
+# la base de datos son DATOS de la gente, no código
+servidor/voley.db
+
+# ¡secreto! quien lo tenga puede falsificar sesiones
+servidor/clave_secreta.txt
+
+__pycache__/

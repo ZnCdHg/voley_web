@@ -64,6 +64,60 @@ button:disabled {
   width: 100%;
 }
 
+/* Campos de texto y desplegables de cualquier pantalla */
+.pantalla input[type="text"],
+.pantalla input[type="password"],
+.pantalla select {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  color: var(--texto);
+  font-size: 1.1rem;
+  padding: 12px;
+  width: 100%;
+}
+
+.texto-error {
+  color: #ff8a80;
+  font-weight: bold;
+}
+
+/* ===== Sesión ===== */
+#barra-sesion {
+  margin-top: 8px;
+}
+
+#sesion-abierta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+#txt-usuario {
+  color: var(--texto-suave);
+}
+
+#pantalla-login, #pantalla-usuarios {
+  max-width: 400px;
+}
+
+.usuario-item {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.usuario-item .rol {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
 /* ===== Aviso flotante (snackbar) ===== */
 #aviso {
   position: fixed;          /* flota sobre todo, anclado a la ventana */

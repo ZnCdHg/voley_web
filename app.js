@@ -9,6 +9,10 @@ let desdeHistorial = false;   // ¿estamos viendo un partido del historial?
 let vistaEvol = 'grafica';    // 'grafica' o 'puntos'
 let setSeleccionado = 0;
 
+// ----- Sesión con el servidor -----
+let usuario = null;           // quién ha iniciado sesión (o null)
+let hayServidor = false;      // ¿la web se está sirviendo desde Flask?
+
 // ----- Referencias a elementos del HTML -----
 const panelLocal     = document.querySelector('#panel-local');
 const panelVisitante = document.querySelector('#panel-visitante');
@@ -325,36 +329,95 @@ function cargarGuardados() {
   }
 }
 
-function guardarPartido() {
+async function guardarPartido() {
   if (partido.guardado) return;
+
+  if (usuario) {
+    // Con sesión: el partido viaja al servidor y lo ve todo el club
+    try {
+      await api('POST', '/api/partidos', { partido: partido });
+    } catch (e) {
+      mostrarAviso(e.message);
+      return;
+    }
+    mostrarAviso('Partido guardado en el club');
+  } else {
+    // Sin sesión: se queda en este navegador, como hasta ahora
+    const lista = cargarGuardados();
+    lista.unshift({ guardadoEn: Date.now(), partido: partido });
+    localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(lista));
+    mostrarAviso('Partido guardado en este dispositivo');
+  }
+
   partido.guardado = true;
-  const lista = cargarGuardados();
-  lista.unshift({ guardadoEn: Date.now(), partido: partido });  // el más reciente, primero
-  localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(lista));
   const btn = document.querySelector('#btn-guardar');
   btn.disabled = true;
   btn.textContent = '💾 Guardado';
-  mostrarAviso('Partido guardado');
 }
 
-function abrirHistorial() {
-  const lista = cargarGuardados();
+async function abrirHistorial() {
   const cont = document.querySelector('#lista-partidos');
-  cont.innerHTML = '';
 
-  lista.forEach(function (item, i) {
+  // Dos fuentes posibles (servidor o este navegador). Las normalizamos
+  // a una misma forma para que el pintado de abajo sea único.
+  let items;
+  if (usuario) {
+    let delServidor;
+    try {
+      delServidor = await api('GET', '/api/partidos');
+    } catch (e) {
+      mostrarAviso(e.message);
+      return;
+    }
+    items = delServidor.map(function (x) {
+      return {
+        partido: x.partido,
+        guardadoEn: x.guardadoEn,
+        autor: x.autor,
+        // un entrenador solo borra lo suyo; el admin, todo
+        puedeBorrar: usuario.rol === 'admin' || x.autorId === usuario.id,
+        borrar: function () { return api('DELETE', '/api/partidos/' + x.id); },
+      };
+    });
+  } else {
+    const lista = cargarGuardados();
+    items = lista.map(function (x, i) {
+      return {
+        partido: x.partido,
+        guardadoEn: x.guardadoEn,
+        autor: null,
+        puedeBorrar: true,
+        borrar: function () {
+          lista.splice(i, 1);
+          localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(lista));
+        },
+      };
+    });
+  }
+
+  cont.innerHTML = '';
+  items.forEach(function (item) {
     const p = item.partido;
     const div = document.createElement('div');
     div.className = 'partido-guardado';
 
+    // Construimos el texto con textContent y NUNCA con innerHTML:
+    // los nombres los escribe la gente, y si alguien pusiera HTML
+    // dentro se ejecutaría en el navegador de los demás (ataque XSS).
     const resumen = document.createElement('div');
     resumen.className = 'resumen';
+    const titulo = document.createElement('strong');
+    titulo.textContent = p.nombres[0] + ' ' + p.sets[0] + ' - ' + p.sets[1] + ' ' + p.nombres[1];
+    const detalle = document.createElement('div');
+    detalle.className = 'fecha';
     const fecha = new Date(item.guardadoEn).toLocaleDateString('es-ES', {
       day: 'numeric', month: 'short', year: 'numeric',
     });
-    resumen.innerHTML =
-      '<strong>' + p.nombres[0] + ' ' + p.sets[0] + ' - ' + p.sets[1] + ' ' + p.nombres[1] + '</strong>' +
-      '<div class="fecha">' + fecha + ' · ' + NOMBRE_MODALIDAD[p.modalidad] + ' · ' + p.setsCerrados.join(' · ') + '</div>';
+    detalle.textContent = fecha + (item.autor ? ' · ' + item.autor : '') +
+      ' · ' + NOMBRE_MODALIDAD[p.modalidad] + ' · ' + p.setsCerrados.join(' · ');
+    resumen.appendChild(titulo);
+    resumen.appendChild(detalle);
+    div.appendChild(resumen);
 
     const btnVer = document.createElement('button');
     btnVer.textContent = 'Ver';
@@ -362,24 +425,112 @@ function abrirHistorial() {
       partido = p;                 // el partido guardado pasa a ser el actual
       abrirStats(true);            // true = venimos del historial
     });
-
-    const btnBorrar = document.createElement('button');
-    btnBorrar.textContent = '🗑️';
-    btnBorrar.className = 'btn-borrar';
-    btnBorrar.addEventListener('click', function () {
-      if (!confirm('¿Borrar este partido del historial?')) return;
-      lista.splice(i, 1);          // quita 1 elemento en la posición i
-      localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(lista));
-      abrirHistorial();            // repinta la lista
-    });
-
-    div.appendChild(resumen);
     div.appendChild(btnVer);
-    div.appendChild(btnBorrar);
+
+    if (item.puedeBorrar) {
+      const btnBorrar = document.createElement('button');
+      btnBorrar.textContent = '🗑️';
+      btnBorrar.className = 'btn-borrar';
+      btnBorrar.addEventListener('click', async function () {
+        if (!confirm('¿Borrar este partido del historial?')) return;
+        try {
+          await item.borrar();
+        } catch (e) {
+          mostrarAviso(e.message);
+          return;
+        }
+        abrirHistorial();          // repinta la lista
+      });
+      div.appendChild(btnBorrar);
+    }
+
     cont.appendChild(div);
   });
 
   mostrarPantalla('pantalla-historial');
+}
+
+// ============================================================
+// SESIÓN Y USUARIOS
+// ============================================================
+
+// Enseña u oculta los trozos de la pantalla de inicio según la sesión
+function renderSesion() {
+  const btnEntrar = document.querySelector('#btn-entrar');
+  const abierta = document.querySelector('#sesion-abierta');
+  if (usuario) {
+    btnEntrar.classList.add('oculto');
+    abierta.classList.remove('oculto');
+    document.querySelector('#txt-usuario').textContent =
+      '👤 ' + usuario.nombre + ' (' + usuario.rol + ')';
+    document.querySelector('#btn-usuarios').classList.toggle('oculto', usuario.rol !== 'admin');
+  } else {
+    abierta.classList.add('oculto');
+    // El botón de entrar solo aparece si de verdad hay servidor detrás
+    // (en GitHub Pages no lo hay y la web sigue funcionando en modo local)
+    btnEntrar.classList.toggle('oculto', !hayServidor);
+  }
+}
+
+// Nada más cargar la página preguntamos al servidor si ya hay sesión
+// (la cookie se recuerda entre visitas)
+(async function comprobarSesion() {
+  try {
+    usuario = await api('GET', '/api/yo');
+    hayServidor = true;
+  } catch (e) {
+    usuario = null;
+    hayServidor = e.estado !== 0;   // 401 = hay servidor, pero sin sesión
+  }
+  renderSesion();
+})();
+
+// Pantalla de gestión de usuarios (solo la ve el admin)
+async function abrirUsuarios() {
+  let lista;
+  try {
+    lista = await api('GET', '/api/usuarios');
+  } catch (e) {
+    mostrarAviso(e.message);
+    return;
+  }
+
+  const cont = document.querySelector('#lista-usuarios');
+  cont.innerHTML = '';
+  lista.forEach(function (u) {
+    const div = document.createElement('div');
+    div.className = 'usuario-item';
+
+    const info = document.createElement('div');
+    const nombre = document.createElement('strong');
+    nombre.textContent = u.nombre;
+    const rol = document.createElement('div');
+    rol.className = 'rol';
+    rol.textContent = u.usuario + ' · ' + u.rol;
+    info.appendChild(nombre);
+    info.appendChild(rol);
+    div.appendChild(info);
+
+    if (u.id !== usuario.id) {   // no ofrecemos borrarse a uno mismo
+      const btn = document.createElement('button');
+      btn.textContent = '🗑️';
+      btn.className = 'btn-borrar';
+      btn.addEventListener('click', async function () {
+        if (!confirm('¿Borrar a ' + u.nombre + ' y sus partidos guardados?')) return;
+        try {
+          await api('DELETE', '/api/usuarios/' + u.id);
+        } catch (e) {
+          mostrarAviso(e.message);
+          return;
+        }
+        abrirUsuarios();
+      });
+      div.appendChild(btn);
+    }
+    cont.appendChild(div);
+  });
+
+  mostrarPantalla('pantalla-usuarios');
 }
 
 // ============================================================
@@ -563,3 +714,67 @@ document.querySelector('#btn-historial-volver').addEventListener('click', functi
 
 // Tiempo muerto
 document.querySelector('#btn-tm-fin').addEventListener('click', cerrarTiempoMuerto);
+
+// ----- Sesión -----
+document.querySelector('#btn-entrar').addEventListener('click', function () {
+  document.querySelector('#login-error').classList.add('oculto');
+  mostrarPantalla('pantalla-login');
+});
+
+document.querySelector('#btn-login').addEventListener('click', async function () {
+  const errorDiv = document.querySelector('#login-error');
+  errorDiv.classList.add('oculto');
+  try {
+    usuario = await api('POST', '/api/login', {
+      usuario: document.querySelector('#login-usuario').value.trim().toLowerCase(),
+      clave: document.querySelector('#login-clave').value,
+    });
+  } catch (e) {
+    errorDiv.textContent = e.message;
+    errorDiv.classList.remove('oculto');
+    return;
+  }
+  document.querySelector('#login-clave').value = '';
+  renderSesion();
+  mostrarPantalla('pantalla-inicio');
+  mostrarAviso('Hola, ' + usuario.nombre);
+});
+
+document.querySelector('#btn-login-volver').addEventListener('click', function () {
+  mostrarPantalla('pantalla-inicio');
+});
+
+document.querySelector('#btn-salir-sesion').addEventListener('click', async function () {
+  try { await api('POST', '/api/logout'); } catch (e) { /* da igual: cerramos localmente */ }
+  usuario = null;
+  renderSesion();
+  mostrarAviso('Sesión cerrada');
+});
+
+// ----- Gestión de usuarios (admin) -----
+document.querySelector('#btn-usuarios').addEventListener('click', abrirUsuarios);
+document.querySelector('#btn-usuarios-volver').addEventListener('click', function () {
+  mostrarPantalla('pantalla-inicio');
+});
+
+document.querySelector('#btn-alta').addEventListener('click', async function () {
+  const errorDiv = document.querySelector('#alta-error');
+  errorDiv.classList.add('oculto');
+  try {
+    await api('POST', '/api/usuarios', {
+      nombre: document.querySelector('#alta-nombre').value,
+      usuario: document.querySelector('#alta-usuario').value,
+      clave: document.querySelector('#alta-clave').value,
+      rol: document.querySelector('#alta-rol').value,
+    });
+  } catch (e) {
+    errorDiv.textContent = e.message;
+    errorDiv.classList.remove('oculto');
+    return;
+  }
+  for (const s of ['#alta-nombre', '#alta-usuario', '#alta-clave']) {
+    document.querySelector(s).value = '';
+  }
+  mostrarAviso('Usuario creado');
+  abrirUsuarios();
+});

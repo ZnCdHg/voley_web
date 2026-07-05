@@ -37,6 +37,47 @@
     </div>
 
     <button id="btn-ver-historial" class="btn-secundario">📋 Historial de partidos</button>
+
+    <!-- Barra de sesión: qué se ve depende de si hay servidor y sesión -->
+    <div id="barra-sesion">
+      <button id="btn-entrar" class="btn-secundario oculto">👤 Iniciar sesión</button>
+      <div id="sesion-abierta" class="oculto">
+        <span id="txt-usuario"></span>
+        <button id="btn-usuarios" class="btn-secundario oculto">⚙️ Usuarios</button>
+        <button id="btn-salir-sesion" class="btn-secundario">Salir</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PANTALLA: iniciar sesión ===== -->
+  <section id="pantalla-login" class="pantalla oculto">
+    <h2>👤 Iniciar sesión</h2>
+    <label for="login-usuario">Usuario</label>
+    <input id="login-usuario" type="text" autocomplete="username">
+    <label for="login-clave">Contraseña</label>
+    <input id="login-clave" type="password" autocomplete="current-password">
+    <div id="login-error" class="texto-error oculto"></div>
+    <button id="btn-login">Entrar</button>
+    <button id="btn-login-volver" class="btn-secundario">← Volver</button>
+  </section>
+
+  <!-- ===== PANTALLA: gestión de usuarios (solo admin) ===== -->
+  <section id="pantalla-usuarios" class="pantalla oculto">
+    <h2>⚙️ Usuarios del club</h2>
+    <div id="lista-usuarios"></div>
+
+    <h3>Dar de alta</h3>
+    <input id="alta-nombre" type="text" placeholder="Nombre (ej: Ana García)" maxlength="40">
+    <input id="alta-usuario" type="text" placeholder="Usuario de acceso (ej: ana)" maxlength="20">
+    <input id="alta-clave" type="password" placeholder="Contraseña (mínimo 6)" autocomplete="new-password">
+    <select id="alta-rol">
+      <option value="entrenador">Entrenador</option>
+      <option value="presidente">Presidente</option>
+      <option value="admin">Administrador</option>
+    </select>
+    <div id="alta-error" class="texto-error oculto"></div>
+    <button id="btn-alta">Crear usuario</button>
+    <button id="btn-usuarios-volver" class="btn-secundario">← Volver</button>
   </section>
 
   <!-- ===== PANTALLA 2: el marcador ===== -->
@@ -132,8 +173,9 @@
     </div>
   </div>
 
-  <!-- Primero la lógica, luego la pantalla (app.js usa funciones de partido.js) -->
+  <!-- Orden importante: app.js usa funciones de partido.js y de api.js -->
   <script src="partido.js"></script>
+  <script src="api.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
