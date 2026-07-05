@@ -9,15 +9,25 @@
 </head>
 <body>
 
+  <!-- Aviso flotante (snackbar). Vive fuera de las pantallas
+       porque puede aparecer sobre cualquiera de ellas -->
+  <div id="aviso" class="oculto"></div>
+
   <!-- ===== PANTALLA 1: configuración del partido ===== -->
-  <section id="pantalla-inicio">
+  <section id="pantalla-inicio" class="pantalla">
     <h1>🏐 Marcador Voley</h1>
 
     <label for="nombre-local">Equipo local</label>
-    <input id="nombre-local" type="text" placeholder="Local" maxlength="20">
+    <div class="fila-equipo">
+      <input id="nombre-local" type="text" placeholder="Local" maxlength="20">
+      <input id="color-local" type="color" value="#2f81f7" title="Color del equipo local">
+    </div>
 
     <label for="nombre-visitante">Equipo visitante</label>
-    <input id="nombre-visitante" type="text" placeholder="Visitante" maxlength="20">
+    <div class="fila-equipo">
+      <input id="nombre-visitante" type="text" placeholder="Visitante" maxlength="20">
+      <input id="color-visitante" type="color" value="#e5534b" title="Color del equipo visitante">
+    </div>
 
     <label>Modalidad</label>
     <div class="botones-modalidad">
@@ -25,12 +35,17 @@
       <button class="btn-modalidad" data-modalidad="6v6">6 vs 6</button>
       <button class="btn-modalidad" data-modalidad="playa">Playa</button>
     </div>
+
+    <button id="btn-ver-historial" class="btn-secundario">📋 Historial de partidos</button>
   </section>
 
   <!-- ===== PANTALLA 2: el marcador ===== -->
-  <section id="pantalla-marcador" class="oculto">
+  <section id="pantalla-marcador" class="pantalla oculto">
 
-    <div id="aviso" class="oculto"></div>
+    <div id="barra-marcador">
+      <span id="info-set"></span>
+      <button id="btn-salir" title="Abandonar partido">✕</button>
+    </div>
 
     <div id="paneles">
       <div class="panel" id="panel-local">
@@ -38,7 +53,10 @@
         <div class="sets-ganados">Sets: <span>0</span></div>
         <div class="puntos">0</div>
         <button class="btn-sumar">+1</button>
-        <button class="btn-restar">−1</button>
+        <div class="fila-botones">
+          <button class="btn-restar">−1</button>
+          <button class="btn-tm">TM (2)</button>
+        </div>
       </div>
 
       <div class="panel" id="panel-visitante">
@@ -46,21 +64,76 @@
         <div class="sets-ganados">Sets: <span>0</span></div>
         <div class="puntos">0</div>
         <button class="btn-sumar">+1</button>
-        <button class="btn-restar">−1</button>
+        <div class="fila-botones">
+          <button class="btn-restar">−1</button>
+          <button class="btn-tm">TM (2)</button>
+        </div>
       </div>
     </div>
 
-    <div id="info-set"></div>
+    <!-- Tira de cuadraditos del set en curso -->
+    <div id="tira-vivo"></div>
 
     <div id="fin-partido" class="oculto">
       <h2 id="texto-ganador"></h2>
       <div id="resumen-sets"></div>
-      <button id="btn-nuevo-partido">Nuevo partido</button>
+      <div class="fila-botones">
+        <button id="btn-ver-stats">📊 Estadísticas</button>
+        <button id="btn-nuevo-partido" class="btn-secundario">Nuevo partido</button>
+      </div>
     </div>
 
   </section>
 
-  <!-- El script va al final: así el HTML de arriba ya existe cuando el JS lo busca -->
+  <!-- ===== PANTALLA 3: estadísticas del partido ===== -->
+  <section id="pantalla-stats" class="pantalla oculto">
+    <h2 id="stats-titulo"></h2>
+
+    <div id="stats-grid">
+      <div class="stat"><div class="stat-valor" id="stat-sets"></div><div class="stat-nombre">Sets</div></div>
+      <div class="stat"><div class="stat-valor" id="stat-puntos"></div><div class="stat-nombre">Puntos totales</div></div>
+      <div class="stat"><div class="stat-valor" id="stat-racha"></div><div class="stat-nombre">Mayor racha</div></div>
+      <div class="stat"><div class="stat-valor" id="stat-duracion"></div><div class="stat-nombre">Duración</div></div>
+    </div>
+
+    <!-- Evolución: gráfica o punto a punto, por set -->
+    <div class="segmento">
+      <button id="btn-vista-grafica" class="activo">📈 Gráfica</button>
+      <button id="btn-vista-puntos">🔲 Punto a punto</button>
+    </div>
+    <div id="selector-sets"></div>
+    <div id="evol-titulo"></div>
+    <div id="contenedor-grafica">
+      <canvas id="canvas-grafica" width="640" height="320"></canvas>
+    </div>
+    <div id="contenedor-puntos" class="oculto"></div>
+
+    <div class="fila-botones" id="stats-acciones">
+      <button id="btn-guardar">💾 Guardar</button>
+      <button id="btn-compartir-texto">📤 Texto</button>
+      <button id="btn-compartir-imagen">🖼️ Imagen</button>
+    </div>
+    <button id="btn-stats-volver" class="btn-secundario">← Volver</button>
+  </section>
+
+  <!-- ===== PANTALLA 4: historial de partidos guardados ===== -->
+  <section id="pantalla-historial" class="pantalla oculto">
+    <h2>📋 Historial</h2>
+    <div id="lista-partidos"></div>
+    <button id="btn-historial-volver" class="btn-secundario">← Volver</button>
+  </section>
+
+  <!-- ===== Cortina de tiempo muerto (tapa toda la pantalla) ===== -->
+  <div id="overlay-tm" class="oculto">
+    <div id="tm-caja">
+      <h2 id="tm-equipo"></h2>
+      <div id="tm-cuenta">30</div>
+      <button id="btn-tm-fin">Reanudar juego</button>
+    </div>
+  </div>
+
+  <!-- Primero la lógica, luego la pantalla (app.js usa funciones de partido.js) -->
+  <script src="partido.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

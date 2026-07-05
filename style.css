@@ -3,9 +3,9 @@
   --fondo: #12181f;
   --panel: #1c2530;
   --texto: #e8edf2;
+  --texto-suave: #9fb0c0;
   --acento: #2f81f7;
-  --local: #2f81f7;
-  --visitante: #e5534b;
+  --borde: #33404f;
 }
 
 /* El asterisco selecciona TODOS los elementos: quitamos márgenes por defecto */
@@ -19,10 +19,7 @@ body {
   background: var(--fondo);
   color: var(--texto);
   font-family: system-ui, sans-serif;
-  min-height: 100vh; /* al menos el alto de la pantalla */
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  min-height: 100vh;
   padding: 16px;
 }
 
@@ -31,13 +28,61 @@ body {
   display: none !important;
 }
 
-/* ===== Pantalla de inicio ===== */
-#pantalla-inicio {
+/* Todas las pantallas comparten ancho máximo y centrado */
+.pantalla {
+  max-width: 700px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.05rem;
+  padding: 12px;
+  background: var(--acento);
+  color: white;
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.btn-secundario {
+  background: var(--borde);
+  color: var(--texto);
+}
+
+.fila-botones {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
   width: 100%;
+}
+
+/* ===== Aviso flotante (snackbar) ===== */
+#aviso {
+  position: fixed;          /* flota sobre todo, anclado a la ventana */
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);  /* truco clásico para centrar algo "fixed" */
+  z-index: 10;
+  background: #b8860b;
+  color: white;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: bold;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+/* ===== Pantalla de inicio ===== */
+#pantalla-inicio {
   max-width: 400px;
+  padding-top: 8vh;
 }
 
 #pantalla-inicio h1 {
@@ -45,13 +90,29 @@ body {
   margin-bottom: 12px;
 }
 
-#pantalla-inicio input {
+.fila-equipo {
+  display: flex;
+  gap: 8px;
+}
+
+.fila-equipo input[type="text"] {
+  flex: 1;
   background: var(--panel);
-  border: 1px solid #33404f;
+  border: 1px solid var(--borde);
   border-radius: 8px;
   color: var(--texto);
   font-size: 1.1rem;
   padding: 12px;
+}
+
+/* El selector de color nativo del navegador, con tamaño de botón */
+.fila-equipo input[type="color"] {
+  width: 52px;
+  height: auto;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
 }
 
 .botones-modalidad {
@@ -60,21 +121,27 @@ body {
 }
 
 .btn-modalidad {
-  flex: 1; /* los tres botones se reparten el ancho por igual */
-  background: var(--acento);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  font-size: 1.1rem;
+  flex: 1;
   padding: 14px 0;
-  cursor: pointer;
+}
+
+#btn-ver-historial {
+  margin-top: 16px;
 }
 
 /* ===== Marcador ===== */
-#pantalla-marcador {
-  width: 100%;
-  max-width: 700px;
-  text-align: center;
+#barra-marcador {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--texto-suave);
+}
+
+#btn-salir {
+  background: none;
+  color: var(--texto-suave);
+  font-size: 1.2rem;
+  padding: 4px 10px;
 }
 
 #paneles {
@@ -91,20 +158,16 @@ body {
   flex: 1;
   background: var(--panel);
   border-radius: 12px;
-  padding: 20px 10px;
+  border-top: 4px solid var(--borde);  /* el color real lo pone el JS */
+  padding: 16px 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: center;
 }
 
-/* Borde de color para distinguir a cada equipo */
-#panel-local     { border-top: 4px solid var(--local); }
-#panel-visitante { border-top: 4px solid var(--visitante); }
-
 .nombre-equipo {
   font-size: 1.2rem;
-  /* si el nombre es muy largo, se corta con puntos suspensivos */
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -121,61 +184,192 @@ body {
   opacity: 0.7;
 }
 
-.btn-sumar, .btn-restar {
-  width: 80%;
-  border: none;
-  border-radius: 8px;
-  font-size: 1.3rem;
-  padding: 12px 0;
-  cursor: pointer;
-}
-
 .btn-sumar {
-  background: var(--acento);
-  color: white;
+  width: 85%;
+  font-size: 1.3rem;
 }
 
-.btn-restar {
-  background: #33404f;
+.panel .fila-botones {
+  width: 85%;
+}
+
+.btn-restar, .btn-tm {
+  flex: 1;
+  background: var(--borde);
   color: var(--texto);
-  font-size: 1rem;
+  font-size: 0.95rem;
   padding: 8px 0;
 }
 
-#info-set {
-  margin-top: 14px;
-  opacity: 0.7;
+/* Tira de cuadraditos del set en curso */
+#tira-vivo {
+  display: flex;
+  flex-wrap: wrap;      /* si no caben, saltan a la línea siguiente */
+  gap: 3px;
+  justify-content: center;
+  min-height: 20px;
 }
 
-/* ===== Avisos (cambio de campo, set ganado) ===== */
-#aviso {
-  background: #b8860b;
-  color: white;
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 12px;
+.cuadro {
+  display: inline-block;
+  border-radius: 4px;
+  text-align: center;
   font-weight: bold;
 }
 
 /* ===== Fin de partido ===== */
 #fin-partido {
-  margin-top: 20px;
   background: var(--panel);
   border-radius: 12px;
   padding: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-#resumen-sets {
-  margin: 12px 0;
-  opacity: 0.8;
+/* ===== Estadísticas ===== */
+#stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;  /* rejilla de 2 columnas */
+  gap: 10px;
 }
 
-#btn-nuevo-partido {
-  background: var(--acento);
-  border: none;
+.stat {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-valor {
+  font-size: 1.3rem;
+  font-weight: bold;
+}
+
+.stat-nombre {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+/* Botones tipo pestaña: Gráfica / Punto a punto */
+.segmento {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--borde);
   border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmento button {
+  flex: 1;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--texto-suave);
+}
+
+.segmento button.activo {
+  background: var(--acento);
   color: white;
-  font-size: 1.1rem;
-  padding: 12px 24px;
-  cursor: pointer;
+}
+
+#selector-sets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#selector-sets button {
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  background: var(--panel);
+  color: var(--texto-suave);
+  border: 1px solid var(--borde);
+}
+
+#selector-sets button.activo {
+  background: var(--acento);
+  color: white;
+  border-color: var(--acento);
+}
+
+#evol-titulo {
+  color: var(--texto-suave);
+  text-align: center;
+}
+
+/* El canvas se dibuja a 640x320 pero se estira al ancho disponible */
+#canvas-grafica {
+  width: 100%;
+  height: auto;
+  background: var(--panel);
+  border-radius: 10px;
+}
+
+#contenedor-puntos {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ===== Historial ===== */
+.partido-guardado {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.partido-guardado .resumen {
+  flex: 1;
+}
+
+.partido-guardado .fecha {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.partido-guardado button {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.btn-borrar {
+  background: #7a2e2a;
+}
+
+#lista-partidos:empty::after {
+  /* mensaje automático cuando la lista está vacía, solo con CSS */
+  content: "No hay partidos guardados todavía.";
+  color: var(--texto-suave);
+}
+
+/* ===== Cortina de tiempo muerto ===== */
+#overlay-tm {
+  position: fixed;
+  inset: 0;                       /* atajo para top/right/bottom/left: 0 */
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#tm-caja {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#tm-cuenta {
+  font-size: 7rem;
+  font-weight: bold;
 }

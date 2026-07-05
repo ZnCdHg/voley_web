@@ -1,223 +1,565 @@
 // ============================================================
-// MARCADOR VOLEY — lógica del partido
-// Equivale al Partido de tus apps Flutter, pero en JavaScript.
+// APP — la pantalla: dibuja el estado y conecta los botones.
+// La lógica del juego vive en partido.js (aquí solo se usa).
 // ============================================================
 
-// ----- Reglas de cada modalidad (las tuyas de árbitro) -----
-// Un "objeto" de JavaScript es como un diccionario de Python.
-const MODALIDADES = {
-  '4v4':   { setsParaGanar: 2, puntosSet: 25, puntosDecisivo: 15, cambioCada: null, cambioDecisivoA: 8 },
-  '6v6':   { setsParaGanar: 3, puntosSet: 25, puntosDecisivo: 15, cambioCada: null, cambioDecisivoA: 8 },
-  'playa': { setsParaGanar: 2, puntosSet: 21, puntosDecisivo: 15, cambioCada: 7,    cambioDecisivoCada: 5 },
-};
-
-// ----- Estado del partido -----
-// "let" porque lo reasignamos al empezar cada partido nuevo.
+// ----- Estado de la interfaz -----
 let partido = null;
+let desdeHistorial = false;   // ¿estamos viendo un partido del historial?
+let vistaEvol = 'grafica';    // 'grafica' o 'puntos'
+let setSeleccionado = 0;
 
-function nuevoPartido(modalidad, nombreLocal, nombreVisitante) {
-  return {
-    modalidad: modalidad,
-    reglas: MODALIDADES[modalidad],
-    nombres: [nombreLocal, nombreVisitante],  // índice 0 = local, 1 = visitante
-    puntos: [0, 0],          // puntos del set en curso
-    sets: [0, 0],            // sets ganados por cada equipo
-    setsCerrados: [],        // resultados de sets terminados, ej. "25-20"
-    ladosInvertidos: false,  // true tras un cambio de campo
-    yaHuboCambioDecisivo: false, // en 4v4/6v6 el decisivo solo cambia una vez (a los 8)
-    terminado: false,
-  };
-}
+// ----- Referencias a elementos del HTML -----
+const panelLocal     = document.querySelector('#panel-local');
+const panelVisitante = document.querySelector('#panel-visitante');
+const paneles        = document.querySelector('#paneles');
+const tiraVivo       = document.querySelector('#tira-vivo');
+const infoSet        = document.querySelector('#info-set');
+const avisoDiv       = document.querySelector('#aviso');
+const finPartidoDiv  = document.querySelector('#fin-partido');
+const overlayTm      = document.querySelector('#overlay-tm');
+
+const NOMBRE_MODALIDAD = { '4v4': '4 vs 4', '6v6': '6 vs 6', 'playa': 'Playa' };
 
 // ============================================================
-// LÓGICA DE JUEGO
+// NAVEGACIÓN ENTRE PANTALLAS
 // ============================================================
 
-// ¿El set en curso es el decisivo? (el último posible)
-function esSetDecisivo(p) {
-  // Si ambos están a un set de ganar, este es el decisivo.
-  return p.sets[0] === p.reglas.setsParaGanar - 1 &&
-         p.sets[1] === p.reglas.setsParaGanar - 1;
-}
-
-// ¿A cuántos puntos se juega el set actual?
-function puntosObjetivo(p) {
-  return esSetDecisivo(p) ? p.reglas.puntosDecisivo : p.reglas.puntosSet;
-}
-
-function sumarPunto(equipo) {           // equipo: 0 (local) o 1 (visitante)
-  if (partido.terminado) return;        // partido acabado: no hacemos nada
-
-  partido.puntos[equipo] += 1;
-
-  // El orden importa: primero miramos si el set ha terminado,
-  // y solo si NO ha terminado comprobamos el cambio de campo.
-  if (comprobarFinDeSet()) {
-    render();
-    return;
-  }
-  comprobarCambioDeCampo();
-  render();
-}
-
-function restarPunto(equipo) {
-  if (partido.terminado) return;
-  if (partido.puntos[equipo] === 0) return;  // no hay puntos negativos
-
-  // Mismo bug que arreglamos en la app Flutter: si el punto que quitamos
-  // fue el que provocó un cambio de campo, hay que deshacer ese cambio.
-  const sumaPrevia = partido.puntos[0] + partido.puntos[1];
-  partido.puntos[equipo] -= 1;
-  deshacerCambioCampoSiProcede(sumaPrevia);
-  render();
-}
-
-function deshacerCambioCampoSiProcede(sumaPrevia) {
-  const p = partido;
-  const decisivo = esSetDecisivo(p);
-
-  if (p.modalidad === 'playa') {
-    const cada = decisivo ? p.reglas.cambioDecisivoCada : p.reglas.cambioCada;
-    if (sumaPrevia > 0 && sumaPrevia % cada === 0) cambiarDeCampo();
-  } else if (decisivo && p.yaHuboCambioDecisivo && sumaPrevia === p.reglas.cambioDecisivoA) {
-    p.yaHuboCambioDecisivo = false;
-    cambiarDeCampo();
+function mostrarPantalla(id) {
+  for (const pantalla of document.querySelectorAll('.pantalla')) {
+    pantalla.classList.toggle('oculto', pantalla.id !== id);
   }
 }
 
-function comprobarFinDeSet() {
-  const objetivo = puntosObjetivo(partido);
-  const [pL, pV] = partido.puntos;  // "desempaquetado", como a, b = lista en Python
+// ============================================================
+// UTILIDADES VISUALES
+// ============================================================
 
-  // Un set se gana llegando al objetivo CON 2 de diferencia
-  let ganador = null;
-  if (pL >= objetivo && pL - pV >= 2) ganador = 0;
-  if (pV >= objetivo && pV - pL >= 2) ganador = 1;
-  if (ganador === null) return false;
-
-  partido.sets[ganador] += 1;
-  partido.setsCerrados.push(pL + '-' + pV);
-
-  // ¿Con este set se gana el partido?
-  if (partido.sets[ganador] === partido.reglas.setsParaGanar) {
-    partido.terminado = true;
-  } else {
-    // Set nuevo: puntos a cero y aviso
-    partido.puntos = [0, 0];
-    partido.yaHuboCambioDecisivo = false;
-    mostrarAviso('Set para ' + partido.nombres[ganador]);
-  }
-  return true;
+// Dado un color de fondo, ¿el texto se lee mejor negro o blanco?
+// (el mismo textoSobre() que pusimos en theme.dart de la app)
+function textoSobre(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);   // "2f" en hexadecimal -> 47
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminancia = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminancia > 150 ? '#111111' : '#ffffff';
 }
 
-function comprobarCambioDeCampo() {
-  const p = partido;
-  const suma = p.puntos[0] + p.puntos[1];
-  const decisivo = esSetDecisivo(p);
-
-  if (p.modalidad === 'playa') {
-    // Playa: cambio cada 7 puntos sumados (cada 5 en el decisivo)
-    const cada = decisivo ? p.reglas.cambioDecisivoCada : p.reglas.cambioCada;
-    if (suma > 0 && suma % cada === 0) cambiarDeCampo();
-  } else if (decisivo && !p.yaHuboCambioDecisivo && suma === p.reglas.cambioDecisivoA) {
-    // 4v4 y 6v6: un único cambio en el set decisivo, a los 8 puntos
-    p.yaHuboCambioDecisivo = true;
-    cambiarDeCampo();
-  }
+// Aviso temporal (snackbar)
+let avisoTimer = null;
+function mostrarAviso(texto) {
+  avisoDiv.textContent = texto;
+  avisoDiv.classList.remove('oculto');
+  clearTimeout(avisoTimer);
+  avisoTimer = setTimeout(function () {
+    avisoDiv.classList.add('oculto');
+  }, 3000);
 }
 
-function cambiarDeCampo() {
-  partido.ladosInvertidos = !partido.ladosInvertidos;
-  mostrarAviso('🔄 ¡Cambio de campo!');
+// Conectamos la lógica con la pantalla: cuando partido.js quiera
+// avisar de algo (set, cambio de campo), saldrá por nuestro snackbar.
+alAvisar = mostrarAviso;
+
+// Crea la ristra de cuadraditos de un set: cada cuadro es un punto,
+// del color del equipo que lo anotó y con su tanteo dentro.
+function crearCuadros(eventos, colores, tam) {
+  const fragmento = document.createDocumentFragment();
+  const marcador = [0, 0];
+  for (const e of eventos) {
+    marcador[e] += 1;
+    const c = document.createElement('span');
+    c.className = 'cuadro';
+    c.style.width = tam + 'px';
+    c.style.height = tam + 'px';
+    c.style.lineHeight = tam + 'px';
+    c.style.fontSize = Math.round(tam * 0.45) + 'px';
+    c.style.background = colores[e];
+    c.style.color = textoSobre(colores[e]);
+    c.textContent = marcador[e];
+    fragmento.appendChild(c);
+  }
+  return fragmento;
 }
 
 // ============================================================
-// PANTALLA (lo que en Flutter hacía setState + build)
+// PANTALLA ENCENDIDA (Wake Lock, como wakelock_plus en Flutter)
 // ============================================================
 
-// Guardamos referencias a los elementos del HTML.
-// document.querySelector busca en la página con la misma
-// sintaxis que los selectores del CSS ("#id", ".clase"...).
-const pantallaInicio   = document.querySelector('#pantalla-inicio');
-const pantallaMarcador = document.querySelector('#pantalla-marcador');
-const paneles          = document.querySelector('#paneles');
-const panelLocal       = document.querySelector('#panel-local');
-const panelVisitante   = document.querySelector('#panel-visitante');
-const infoSet          = document.querySelector('#info-set');
-const avisoDiv         = document.querySelector('#aviso');
-const finPartidoDiv    = document.querySelector('#fin-partido');
+let wakeLock = null;
 
-// Redibuja TODA la pantalla a partir del estado del partido.
-// Un solo camino: cualquier cambio -> render(). Menos bugs.
+async function activarWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) { /* si el navegador no deja, no pasa nada */ }
+}
+
+function liberarWakeLock() {
+  if (wakeLock) {
+    wakeLock.release();
+    wakeLock = null;
+  }
+}
+
+// Al volver a la pestaña, el navegador suelta el wake lock: lo repedimos
+document.addEventListener('visibilitychange', function () {
+  const marcadorVisible = !document.querySelector('#pantalla-marcador').classList.contains('oculto');
+  if (document.visibilityState === 'visible' && marcadorVisible && partido && !partido.terminado) {
+    activarWakeLock();
+  }
+});
+
+// ============================================================
+// EL MARCADOR
+// ============================================================
+
+// Redibuja TODO el marcador a partir del estado del partido.
 function render() {
   const p = partido;
 
-  // Cada panel muestra los datos de su equipo
   const datos = [[panelLocal, 0], [panelVisitante, 1]];
   for (const [panel, i] of datos) {
     panel.querySelector('.nombre-equipo').textContent = p.nombres[i];
-    panel.querySelector('.puntos').textContent = p.puntos[i];
     panel.querySelector('.sets-ganados span').textContent = p.sets[i];
+    panel.style.borderTopColor = p.colores[i];
+
+    const puntosDiv = panel.querySelector('.puntos');
+    puntosDiv.textContent = p.puntos[i];
+    puntosDiv.style.color = p.colores[i];
+
+    const btnSumar = panel.querySelector('.btn-sumar');
+    btnSumar.style.background = p.colores[i];
+    btnSumar.style.color = textoSobre(p.colores[i]);
+
+    const btnTm = panel.querySelector('.btn-tm');
+    btnTm.textContent = 'TM (' + p.tmRestantes[i] + ')';
+    btnTm.disabled = p.tmRestantes[i] === 0 || p.terminado;
   }
 
-  // Cambio de campo: la clase CSS "invertido" da la vuelta a los paneles
   paneles.classList.toggle('invertido', p.ladosInvertidos);
+
+  // Tira de cuadraditos del set en curso
+  tiraVivo.innerHTML = '';
+  tiraVivo.appendChild(crearCuadros(p.eventosSetActual, p.colores, 20));
 
   const numSet = p.setsCerrados.length + 1;
   infoSet.textContent = p.terminado
     ? 'Partido terminado'
-    : 'Set ' + numSet + ' · a ' + puntosObjetivo(p) + ' puntos';
+    : NOMBRE_MODALIDAD[p.modalidad] + ' · Set ' + numSet + ' · a ' + puntosObjetivo(p) + ' puntos';
 
   if (p.terminado) {
-    const ganador = p.sets[0] > p.sets[1] ? 0 : 1;
+    const g = p.sets[0] > p.sets[1] ? 0 : 1;
     document.querySelector('#texto-ganador').textContent =
-      '🏆 Gana ' + p.nombres[ganador] + ' (' + p.sets[0] + '-' + p.sets[1] + ')';
+      '🏆 Gana ' + p.nombres[g] + ' (' + p.sets[0] + '-' + p.sets[1] + ')';
     document.querySelector('#resumen-sets').textContent =
       'Sets: ' + p.setsCerrados.join('  ·  ');
     finPartidoDiv.classList.remove('oculto');
+    liberarWakeLock();   // partido acabado: la pantalla ya puede apagarse
   } else {
     finPartidoDiv.classList.add('oculto');
   }
 }
 
-// Aviso temporal arriba (como tus snackbars de Flutter)
-let avisoTimer = null;
-function mostrarAviso(texto) {
-  avisoDiv.textContent = texto;
-  avisoDiv.classList.remove('oculto');
-  clearTimeout(avisoTimer);                    // si había un aviso, reinicia el reloj
-  avisoTimer = setTimeout(function () {        // dentro de 3000 ms, ocúltalo
-    avisoDiv.classList.add('oculto');
-  }, 3000);
+// ----- Tiempo muerto con cuenta atrás de 30 s -----
+let tmIntervalo = null;
+
+function pedirTiempoMuerto(equipo) {
+  if (!usarTiempoMuerto(partido, equipo)) return;
+  render();
+
+  document.querySelector('#tm-equipo').textContent = '⏱️ Tiempo muerto · ' + partido.nombres[equipo];
+  const cuenta = document.querySelector('#tm-cuenta');
+  let restante = 30;
+  cuenta.textContent = restante;
+  overlayTm.classList.remove('oculto');
+
+  // setInterval ejecuta la función cada 1000 ms hasta que lo paremos
+  tmIntervalo = setInterval(function () {
+    restante -= 1;
+    cuenta.textContent = restante;
+    if (restante <= 0) cerrarTiempoMuerto();
+  }, 1000);
+}
+
+function cerrarTiempoMuerto() {
+  clearInterval(tmIntervalo);
+  overlayTm.classList.add('oculto');
 }
 
 // ============================================================
-// EVENTOS: conectar los botones con la lógica
+// ESTADÍSTICAS
 // ============================================================
 
-// Los tres botones de modalidad comparten la clase .btn-modalidad
+function abrirStats(esHistorial) {
+  desdeHistorial = esHistorial;
+  const p = partido;
+  const g = p.sets[0] > p.sets[1] ? 0 : 1;
+  const t = puntosTotales(p);
+
+  document.querySelector('#stats-titulo').textContent =
+    '🏆 ' + p.nombres[g] + ' gana ' + p.sets[g] + '-' + p.sets[1 - g] + ' a ' + p.nombres[1 - g];
+  document.querySelector('#stat-sets').textContent = p.setsCerrados.join(' · ');
+  document.querySelector('#stat-puntos').textContent = t[0] + ' - ' + t[1];
+  document.querySelector('#stat-racha').textContent = p.rachaMax[0] + ' / ' + p.rachaMax[1];
+  document.querySelector('#stat-duracion').textContent = duracionTexto(p);
+
+  const btnGuardar = document.querySelector('#btn-guardar');
+  btnGuardar.disabled = p.guardado || esHistorial;
+  btnGuardar.textContent = p.guardado || esHistorial ? '💾 Guardado' : '💾 Guardar';
+
+  // Un botón por set jugado
+  const selector = document.querySelector('#selector-sets');
+  selector.innerHTML = '';
+  p.eventosPorSet.forEach(function (_, i) {
+    const b = document.createElement('button');
+    b.textContent = 'Set ' + (i + 1);
+    b.addEventListener('click', function () {
+      setSeleccionado = i;
+      renderEvolucion();
+    });
+    selector.appendChild(b);
+  });
+
+  setSeleccionado = 0;
+  vistaEvol = 'grafica';
+  renderEvolucion();
+  mostrarPantalla('pantalla-stats');
+}
+
+function renderEvolucion() {
+  const p = partido;
+
+  // Marcar el botón de set y de vista activos
+  document.querySelectorAll('#selector-sets button').forEach(function (b, i) {
+    b.classList.toggle('activo', i === setSeleccionado);
+  });
+  document.querySelector('#btn-vista-grafica').classList.toggle('activo', vistaEvol === 'grafica');
+  document.querySelector('#btn-vista-puntos').classList.toggle('activo', vistaEvol === 'puntos');
+
+  const eventos = p.eventosPorSet[setSeleccionado] || [];
+  document.querySelector('#evol-titulo').textContent =
+    'Set ' + (setSeleccionado + 1) + '  (' + p.setsCerrados[setSeleccionado] + ')';
+
+  const contGrafica = document.querySelector('#contenedor-grafica');
+  const contPuntos = document.querySelector('#contenedor-puntos');
+  contGrafica.classList.toggle('oculto', vistaEvol !== 'grafica');
+  contPuntos.classList.toggle('oculto', vistaEvol !== 'puntos');
+
+  if (vistaEvol === 'grafica') {
+    dibujarGrafica(document.querySelector('#canvas-grafica'), eventos, p.colores);
+  } else {
+    contPuntos.innerHTML = '';
+    contPuntos.appendChild(crearCuadros(eventos, p.colores, 30));
+  }
+}
+
+// Dibuja en el canvas las dos líneas de puntos acumulados de un set.
+// El canvas es como el CustomPainter de Flutter: nos da un contexto
+// (ctx) con órdenes de dibujo: moveTo, lineTo, fillText...
+function dibujarGrafica(canvas, eventos, colores) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const mIzq = 36, mDer = 34, mSup = 14, mInf = 24;
+  ctx.clearRect(0, 0, W, H);
+
+  // Series acumuladas: tras cada punto, cuántos lleva cada equipo
+  const series = [[0], [0]];
+  let a = 0, b = 0;
+  for (const e of eventos) {
+    if (e === 0) a += 1; else b += 1;
+    series[0].push(a);
+    series[1].push(b);
+  }
+  const maxY = Math.max(a, b, 5);
+  const nX = Math.max(eventos.length, 1);
+
+  // Funciones que traducen (nº de punto, tanteo) a píxeles del canvas
+  const x = function (i) { return mIzq + (W - mIzq - mDer) * i / nX; };
+  const y = function (v) { return H - mInf - (H - mSup - mInf) * v / maxY; };
+
+  // Rejilla horizontal cada 5 puntos, con su etiqueta
+  ctx.strokeStyle = 'rgba(140, 155, 170, 0.2)';
+  ctx.fillStyle = '#9fb0c0';
+  ctx.font = '12px sans-serif';
+  ctx.lineWidth = 1;
+  for (let v = 0; v <= maxY; v += 5) {
+    ctx.beginPath();
+    ctx.moveTo(mIzq, y(v));
+    ctx.lineTo(W - mDer, y(v));
+    ctx.stroke();
+    ctx.fillText(v, 8, y(v) + 4);
+  }
+
+  // Las dos líneas, cada una del color de su equipo
+  for (const equipo of [0, 1]) {
+    const serie = series[equipo];
+    ctx.strokeStyle = colores[equipo];
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    serie.forEach(function (v, i) {
+      if (i === 0) ctx.moveTo(x(i), y(v));
+      else ctx.lineTo(x(i), y(v));
+    });
+    ctx.stroke();
+    // Tanteo final al extremo de cada línea
+    ctx.fillStyle = colores[equipo];
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(serie[serie.length - 1], x(serie.length - 1) + 5, y(serie[serie.length - 1]) + 5);
+  }
+}
+
+// ============================================================
+// GUARDAR E HISTORIAL (localStorage: el "SQLite" del navegador)
+// localStorage solo guarda texto, así que convertimos el partido
+// a texto con JSON.stringify y lo recuperamos con JSON.parse.
+// ============================================================
+
+const CLAVE_HISTORIAL = 'voley_partidos';
+
+function cargarGuardados() {
+  try {
+    return JSON.parse(localStorage.getItem(CLAVE_HISTORIAL)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function guardarPartido() {
+  if (partido.guardado) return;
+  partido.guardado = true;
+  const lista = cargarGuardados();
+  lista.unshift({ guardadoEn: Date.now(), partido: partido });  // el más reciente, primero
+  localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(lista));
+  const btn = document.querySelector('#btn-guardar');
+  btn.disabled = true;
+  btn.textContent = '💾 Guardado';
+  mostrarAviso('Partido guardado');
+}
+
+function abrirHistorial() {
+  const lista = cargarGuardados();
+  const cont = document.querySelector('#lista-partidos');
+  cont.innerHTML = '';
+
+  lista.forEach(function (item, i) {
+    const p = item.partido;
+    const div = document.createElement('div');
+    div.className = 'partido-guardado';
+
+    const resumen = document.createElement('div');
+    resumen.className = 'resumen';
+    const fecha = new Date(item.guardadoEn).toLocaleDateString('es-ES', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+    resumen.innerHTML =
+      '<strong>' + p.nombres[0] + ' ' + p.sets[0] + ' - ' + p.sets[1] + ' ' + p.nombres[1] + '</strong>' +
+      '<div class="fecha">' + fecha + ' · ' + NOMBRE_MODALIDAD[p.modalidad] + ' · ' + p.setsCerrados.join(' · ') + '</div>';
+
+    const btnVer = document.createElement('button');
+    btnVer.textContent = 'Ver';
+    btnVer.addEventListener('click', function () {
+      partido = p;                 // el partido guardado pasa a ser el actual
+      abrirStats(true);            // true = venimos del historial
+    });
+
+    const btnBorrar = document.createElement('button');
+    btnBorrar.textContent = '🗑️';
+    btnBorrar.className = 'btn-borrar';
+    btnBorrar.addEventListener('click', function () {
+      if (!confirm('¿Borrar este partido del historial?')) return;
+      lista.splice(i, 1);          // quita 1 elemento en la posición i
+      localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(lista));
+      abrirHistorial();            // repinta la lista
+    });
+
+    div.appendChild(resumen);
+    div.appendChild(btnVer);
+    div.appendChild(btnBorrar);
+    cont.appendChild(div);
+  });
+
+  mostrarPantalla('pantalla-historial');
+}
+
+// ============================================================
+// COMPARTIR (texto y también imagen, como en la app)
+// ============================================================
+
+async function compartirTexto() {
+  const texto = textoCompartir(partido);
+  // navigator.share abre el menú nativo de compartir del móvil;
+  // en ordenador no suele existir, así que copiamos al portapapeles.
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: texto });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;   // el usuario cerró el menú: no es un error
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(texto);
+    mostrarAviso('Resumen copiado al portapapeles');
+  } catch (e) {
+    mostrarAviso('No se pudo compartir');
+  }
+}
+
+// Genera la imagen del partido en un canvas (como imagen_partido.dart)
+function generarImagenPartido(p) {
+  const W = 800, margen = 30;
+  const lado = 22, hueco = 4;
+  const porFila = Math.floor((W - margen * 2) / (lado + hueco));
+
+  // Calculamos el alto según cuántas filas de cuadraditos salgan
+  let H = 170;
+  for (const ev of p.eventosPorSet) {
+    H += 40 + Math.max(1, Math.ceil(ev.length / porFila)) * (lado + hueco);
+  }
+  H += margen;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#12181f';
+  ctx.fillRect(0, 0, W, H);
+
+  const g = p.sets[0] > p.sets[1] ? 0 : 1;
+  const t = puntosTotales(p);
+  ctx.fillStyle = '#e8edf2';
+  ctx.font = 'bold 30px sans-serif';
+  ctx.fillText(p.nombres[0] + ' ' + p.sets[0] + ' - ' + p.sets[1] + ' ' + p.nombres[1], margen, 55);
+  ctx.font = '17px sans-serif';
+  ctx.fillStyle = '#9fb0c0';
+  ctx.fillText('Gana ' + p.nombres[g] + ' · ' + NOMBRE_MODALIDAD[p.modalidad] + ' · ' + duracionTexto(p), margen, 90);
+  ctx.fillText('Puntos totales ' + t[0] + '-' + t[1] + ' · Mayor racha ' + p.rachaMax[0] + '-' + p.rachaMax[1], margen, 115);
+
+  let yy = 165;
+  p.eventosPorSet.forEach(function (eventos, i) {
+    ctx.fillStyle = '#e8edf2';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('Set ' + (i + 1) + '   ' + p.setsCerrados[i], margen, yy);
+    yy += 12;
+
+    const marcador = [0, 0];
+    eventos.forEach(function (e, j) {
+      marcador[e] += 1;
+      const cx = margen + (j % porFila) * (lado + hueco);
+      const cy = yy + Math.floor(j / porFila) * (lado + hueco);
+      ctx.fillStyle = p.colores[e];
+      ctx.fillRect(cx, cy, lado, lado);
+      ctx.fillStyle = textoSobre(p.colores[e]);
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(marcador[e], cx + lado / 2, cy + lado / 2 + 4);
+      ctx.textAlign = 'left';
+    });
+    yy += Math.max(1, Math.ceil(eventos.length / porFila)) * (lado + hueco) + 28;
+  });
+
+  return canvas;
+}
+
+function compartirImagen() {
+  const canvas = generarImagenPartido(partido);
+  // toBlob convierte el dibujo en un archivo PNG en memoria
+  canvas.toBlob(async function (blob) {
+    const archivo = new File([blob], 'partido.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+      try {
+        await navigator.share({ files: [archivo] });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    // Sin menú de compartir (ordenador): descargamos el PNG
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = 'partido.png';
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+    mostrarAviso('Imagen descargada');
+  });
+}
+
+// ============================================================
+// EVENTOS: conectar los botones con todo lo anterior
+// ============================================================
+
+// Empezar partido
 for (const boton of document.querySelectorAll('.btn-modalidad')) {
   boton.addEventListener('click', function () {
-    // "dataset.modalidad" lee el atributo data-modalidad del HTML
-    const modalidad = boton.dataset.modalidad;
-    // "|| 'Local'": si el campo está vacío, usamos un nombre por defecto
     const local     = document.querySelector('#nombre-local').value.trim() || 'Local';
     const visitante = document.querySelector('#nombre-visitante').value.trim() || 'Visitante';
+    const colorL    = document.querySelector('#color-local').value;
+    const colorV    = document.querySelector('#color-visitante').value;
 
-    partido = nuevoPartido(modalidad, local, visitante);
-    pantallaInicio.classList.add('oculto');
-    pantallaMarcador.classList.remove('oculto');
+    partido = nuevoPartido(boton.dataset.modalidad, local, visitante, colorL, colorV);
+    mostrarPantalla('pantalla-marcador');
+    activarWakeLock();
     render();
   });
 }
 
-// Botones +1 y −1 de cada panel
-panelLocal.querySelector('.btn-sumar').addEventListener('click', function () { sumarPunto(0); });
-panelLocal.querySelector('.btn-restar').addEventListener('click', function () { restarPunto(0); });
-panelVisitante.querySelector('.btn-sumar').addEventListener('click', function () { sumarPunto(1); });
-panelVisitante.querySelector('.btn-restar').addEventListener('click', function () { restarPunto(1); });
+// Botones de los dos paneles (0 = local, 1 = visitante)
+const panelesEquipos = [[panelLocal, 0], [panelVisitante, 1]];
+for (const [panel, equipo] of panelesEquipos) {
+  panel.querySelector('.btn-sumar').addEventListener('click', function () {
+    sumarPunto(partido, equipo);
+    render();
+  });
+  panel.querySelector('.btn-restar').addEventListener('click', function () {
+    restarPunto(partido, equipo);
+    render();
+  });
+  panel.querySelector('.btn-tm').addEventListener('click', function () {
+    pedirTiempoMuerto(equipo);
+  });
+}
 
-document.querySelector('#btn-nuevo-partido').addEventListener('click', function () {
-  pantallaMarcador.classList.add('oculto');
-  pantallaInicio.classList.remove('oculto');
+// Salir del marcador a mitad de partido
+document.querySelector('#btn-salir').addEventListener('click', function () {
+  if (partido && !partido.terminado) {
+    if (!confirm('¿Abandonar el partido? Se perderá el marcador.')) return;
+  }
+  liberarWakeLock();
+  mostrarPantalla('pantalla-inicio');
 });
+
+// Fin de partido
+document.querySelector('#btn-ver-stats').addEventListener('click', function () {
+  abrirStats(false);
+});
+document.querySelector('#btn-nuevo-partido').addEventListener('click', function () {
+  mostrarPantalla('pantalla-inicio');
+});
+
+// Estadísticas
+document.querySelector('#btn-vista-grafica').addEventListener('click', function () {
+  vistaEvol = 'grafica';
+  renderEvolucion();
+});
+document.querySelector('#btn-vista-puntos').addEventListener('click', function () {
+  vistaEvol = 'puntos';
+  renderEvolucion();
+});
+document.querySelector('#btn-guardar').addEventListener('click', guardarPartido);
+document.querySelector('#btn-compartir-texto').addEventListener('click', compartirTexto);
+document.querySelector('#btn-compartir-imagen').addEventListener('click', compartirImagen);
+document.querySelector('#btn-stats-volver').addEventListener('click', function () {
+  if (desdeHistorial) abrirHistorial();
+  else mostrarPantalla('pantalla-inicio');
+});
+
+// Historial
+document.querySelector('#btn-ver-historial').addEventListener('click', abrirHistorial);
+document.querySelector('#btn-historial-volver').addEventListener('click', function () {
+  mostrarPantalla('pantalla-inicio');
+});
+
+// Tiempo muerto
+document.querySelector('#btn-tm-fin').addEventListener('click', cerrarTiempoMuerto);
