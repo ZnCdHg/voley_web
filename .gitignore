@@ -7,6 +7,7 @@ servidor/.venv/
 
 # la base de datos son DATOS de la gente, no código
 servidor/voley.db
+servidor/agenda.db
 
 # ¡secreto! quien lo tenga puede falsificar sesiones
 servidor/clave_secreta.txt

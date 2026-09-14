@@ -22,6 +22,9 @@ from functools import wraps
 from flask import Flask, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from agenda_api import agenda
+from agenda_api import iniciar_bd as iniciar_bd_agenda
+
 # ---------- Rutas de archivos ----------
 CARPETA = os.path.dirname(os.path.abspath(__file__))      # .../voley_web/servidor
 RUTA_BD = os.path.join(CARPETA, "voley.db")
@@ -311,6 +314,10 @@ def borrar_usuario(admin, usuario_id):
 # host (PythonAnywhere) el módulo se importa y este if de abajo
 # nunca se ejecuta.
 iniciar_bd()
+
+# La API de la app Agenda Familiar vive en agenda_api.py, con su propia BD.
+app.register_blueprint(agenda)
+iniciar_bd_agenda()
 
 if __name__ == "__main__":
     # host 0.0.0.0 = acepta conexiones de otros aparatos de tu red (el móvil)
