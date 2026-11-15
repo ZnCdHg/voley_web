@@ -13,6 +13,10 @@ El servidor NO mezcla nada. Guarda el documento con un número de versión:
   - PUT  manda {version, datos}; si alguien subió antes (la versión ya no
          coincide) responde 409 con lo último, y el móvil mezcla y reintenta.
 La mezcla la hacen los móviles, entrada a entrada, por fecha de cambio.
+
+Aparte, la app "Plataformas" de la tele sube sesiones (quién puso qué
+plataforma, cuándo y hasta cuándo) a /familias/<id>/tele, con el mismo
+código de familia. Agenda Familiar las lee para enseñar la estadística.
 """
 
 import hashlib
@@ -49,6 +53,20 @@ def iniciar_bd():
             datos          TEXT NOT NULL,
             creada_en      INTEGER NOT NULL,
             actualizada_en INTEGER NOT NULL
+        )
+    """)
+    # Sesiones de la tele: cada una tiene un id que pone la tele, así que si la
+    # misma sesión llega dos veces (un reintento) no se duplica.
+    conexion.execute("""
+        CREATE TABLE IF NOT EXISTS tele_sesiones (
+            familia_id TEXT NOT NULL,
+            id         TEXT NOT NULL,
+            persona    TEXT NOT NULL,
+            paquete    TEXT NOT NULL,
+            plataforma TEXT NOT NULL,
+            inicio     INTEGER NOT NULL,
+            fin        INTEGER NOT NULL,
+            PRIMARY KEY (familia_id, id)
         )
     """)
     conexion.commit()
@@ -162,7 +180,73 @@ def borrar_familia(familia_id):
         if familia_autorizada(conexion, familia_id) is None:
             return NO_ENCONTRADA
         conexion.execute("DELETE FROM familias WHERE id = ?", (familia_id,))
+        conexion.execute("DELETE FROM tele_sesiones WHERE familia_id = ?", (familia_id,))
         conexion.commit()
         return jsonify(ok=True)
+    finally:
+        conexion.close()
+
+
+# ---------------------------------------------------------------- tele
+
+# Tope de sesiones por envío y de lectura: una familia no pone la tele miles de veces.
+MAX_SESIONES_ENVIO = 500
+MAX_SESIONES_LECTURA = 5000
+
+
+def sesion_valida(s):
+    textos = ("id", "persona", "paquete", "plataforma")
+    if not isinstance(s, dict):
+        return False
+    if not all(isinstance(s.get(k), str) and 0 < len(s[k]) <= 100 for k in textos):
+        return False
+    inicio, fin = s.get("inicio"), s.get("fin")
+    return (isinstance(inicio, int) and isinstance(fin, int)
+            and not isinstance(inicio, bool) and not isinstance(fin, bool)
+            and 0 < inicio <= fin)
+
+
+@agenda.post("/familias/<familia_id>/tele")
+def subir_sesiones_tele(familia_id):
+    cuerpo, error = cuerpo_json()
+    if error:
+        return error
+    sesiones = cuerpo.get("sesiones")
+    if not isinstance(sesiones, list) or len(sesiones) > MAX_SESIONES_ENVIO:
+        return jsonify(error="Se esperaba una lista de sesiones"), 400
+    if not all(sesion_valida(s) for s in sesiones):
+        return jsonify(error="Alguna sesión no es válida"), 400
+    conexion = bd()
+    try:
+        if familia_autorizada(conexion, familia_id) is None:
+            return NO_ENCONTRADA
+        conexion.executemany(
+            "INSERT OR IGNORE INTO tele_sesiones "
+            "(familia_id, id, persona, paquete, plataforma, inicio, fin) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(familia_id, s["id"], s["persona"], s["paquete"], s["plataforma"], s["inicio"], s["fin"])
+             for s in sesiones],
+        )
+        conexion.commit()
+        return jsonify(ok=True, recibidas=len(sesiones))
+    finally:
+        conexion.close()
+
+
+@agenda.get("/familias/<familia_id>/tele")
+def leer_sesiones_tele(familia_id):
+    try:
+        desde = int(request.args.get("desde", "0"))
+    except ValueError:
+        return jsonify(error="'desde' debe ser un número"), 400
+    conexion = bd()
+    try:
+        if familia_autorizada(conexion, familia_id) is None:
+            return NO_ENCONTRADA
+        filas = conexion.execute(
+            "SELECT id, persona, paquete, plataforma, inicio, fin FROM tele_sesiones "
+            "WHERE familia_id = ? AND fin >= ? ORDER BY inicio DESC LIMIT ?",
+            (familia_id, desde, MAX_SESIONES_LECTURA),
+        ).fetchall()
+        return jsonify(sesiones=[dict(f) for f in filas])
     finally:
         conexion.close()
